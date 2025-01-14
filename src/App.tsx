@@ -5,7 +5,8 @@ interface SearchSource {
   name: string;
   url: string;
   description: string;
-  category?: 'general' | 'academic';  // 用于区分普通搜索和学术搜索
+  category?: 'general' | 'academic';
+  isCustom?: boolean;
 }
 
 interface SearchWindow {
@@ -16,9 +17,19 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [selectedEngines, setSelectedEngines] = useState<{[key: string]: boolean}>({});
+  const [customSources, setCustomSources] = useState<SearchSource[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newSource, setNewSource] = useState<SearchSource>({
+    id: '',
+    name: '',
+    url: '',
+    description: '',
+    category: 'general',
+    isCustom: true
+  });
   const searchWindows = useRef<SearchWindow>({});
 
-  const searchSources: SearchSource[] = [
+  const defaultSearchSources: SearchSource[] = [
     { 
       id: 'google', 
       name: 'Google',
@@ -77,6 +88,84 @@ function App() {
     }
   ];
 
+  // 合并默认和自定义搜索源
+  const searchSources = [...defaultSearchSources, ...customSources];
+
+  // 加载保存的搜索引擎选择和自定义搜索源
+  useEffect(() => {
+    const savedPreferences = localStorage.getItem('searchEnginePreferences');
+    const savedCustomSources = localStorage.getItem('customSearchSources');
+    
+    if (savedPreferences) {
+      setSelectedEngines(JSON.parse(savedPreferences));
+    } else {
+      const defaultPreferences = defaultSearchSources.reduce((acc, source) => {
+        acc[source.id] = true;
+        return acc;
+      }, {} as {[key: string]: boolean});
+      setSelectedEngines(defaultPreferences);
+      localStorage.setItem('searchEnginePreferences', JSON.stringify(defaultPreferences));
+    }
+
+    if (savedCustomSources) {
+      setCustomSources(JSON.parse(savedCustomSources));
+    }
+  }, []);
+
+  // 保存搜索引擎选择
+  const handleEngineToggle = (sourceId: string) => {
+    const newSelectedEngines = {
+      ...selectedEngines,
+      [sourceId]: !selectedEngines[sourceId]
+    };
+    setSelectedEngines(newSelectedEngines);
+    localStorage.setItem('searchEnginePreferences', JSON.stringify(newSelectedEngines));
+  };
+
+  // 添加新的搜索源
+  const handleAddSource = () => {
+    if (!newSource.name || !newSource.url) return;
+
+    // 生成唯一ID
+    newSource.id = `custom_${Date.now()}`;
+    
+    const updatedCustomSources = [...customSources, newSource];
+    setCustomSources(updatedCustomSources);
+    localStorage.setItem('customSearchSources', JSON.stringify(updatedCustomSources));
+    
+    // 自动选中新添加的搜索源
+    const newSelectedEngines = {
+      ...selectedEngines,
+      [newSource.id]: true
+    };
+    setSelectedEngines(newSelectedEngines);
+    localStorage.setItem('searchEnginePreferences', JSON.stringify(newSelectedEngines));
+
+    // 重置表单并关闭模态框
+    setNewSource({
+      id: '',
+      name: '',
+      url: '',
+      description: '',
+      category: 'general',
+      isCustom: true
+    });
+    setShowAddModal(false);
+  };
+
+  // 删除自定义搜索源
+  const handleDeleteSource = (sourceId: string) => {
+    const updatedCustomSources = customSources.filter(source => source.id !== sourceId);
+    setCustomSources(updatedCustomSources);
+    localStorage.setItem('customSearchSources', JSON.stringify(updatedCustomSources));
+
+    // 从选中列表中移除
+    const newSelectedEngines = { ...selectedEngines };
+    delete newSelectedEngines[sourceId];
+    setSelectedEngines(newSelectedEngines);
+    localStorage.setItem('searchEnginePreferences', JSON.stringify(newSelectedEngines));
+  };
+
   const isWindowOpen = (win: Window | null): boolean => {
     return win != null && !win.closed;
   };
@@ -118,30 +207,6 @@ function App() {
     openSearchWindow(source, searchQuery);
   };
 
-  const handleEngineToggle = (sourceId: string) => {
-    const newSelectedEngines = {
-      ...selectedEngines,
-      [sourceId]: !selectedEngines[sourceId]
-    };
-    setSelectedEngines(newSelectedEngines);
-    localStorage.setItem('searchEnginePreferences', JSON.stringify(newSelectedEngines));
-  };
-
-  useEffect(() => {
-    const savedPreferences = localStorage.getItem('searchEnginePreferences');
-    if (savedPreferences) {
-      setSelectedEngines(JSON.parse(savedPreferences));
-    } else {
-      // 默认全选
-      const defaultPreferences = searchSources.reduce((acc, source) => {
-        acc[source.id] = true;
-        return acc;
-      }, {} as {[key: string]: boolean});
-      setSelectedEngines(defaultPreferences);
-      localStorage.setItem('searchEnginePreferences', JSON.stringify(defaultPreferences));
-    }
-  }, []);
-
   useEffect(() => {
     return () => {
       Object.values(searchWindows.current).forEach(window => {
@@ -151,10 +216,6 @@ function App() {
       });
     };
   }, []);
-
-  // 将搜索源分组
-  const generalSources = searchSources.filter(source => source.category === 'general');
-  const academicSources = searchSources.filter(source => source.category === 'academic');
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
@@ -190,13 +251,23 @@ function App() {
       {/* Search Sources Grid */}
       <div className="flex-grow p-4">
         <div className="max-w-6xl mx-auto space-y-6">
+          {/* Add New Source Button */}
+          <div className="flex justify-end px-4">
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="px-4 py-2 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors"
+            >
+              Add Custom Search Engine
+            </button>
+          </div>
+
           {/* General Search Engines */}
           <div>
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 px-4">
               General Search
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {generalSources.map((source) => (
+              {searchSources.filter(source => source.category === 'general').map((source) => (
                 <div 
                   key={source.id} 
                   className="bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-shadow p-6"
@@ -219,14 +290,26 @@ function App() {
                         </p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleSingleSearch(source)}
-                      className="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-full
-                               text-gray-700 dark:text-gray-300 text-sm font-medium
-                               hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                    >
-                      Search
-                    </button>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleSingleSearch(source)}
+                        className="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-full
+                                 text-gray-700 dark:text-gray-300 text-sm font-medium
+                                 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                      >
+                        Search
+                      </button>
+                      {source.isCustom && (
+                        <button
+                          onClick={() => handleDeleteSource(source.id)}
+                          className="px-3 py-2 bg-red-100 dark:bg-red-900 rounded-full
+                                   text-red-600 dark:text-red-300 text-sm font-medium
+                                   hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </div>
                   {isSearching && searchQuery && isWindowOpen(searchWindows.current[source.id]) && (
                     <div className="mt-4">
@@ -252,7 +335,7 @@ function App() {
               Academic Search
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {academicSources.map((source) => (
+              {searchSources.filter(source => source.category === 'academic').map((source) => (
                 <div 
                   key={source.id} 
                   className="bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-shadow p-6"
@@ -275,14 +358,26 @@ function App() {
                         </p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleSingleSearch(source)}
-                      className="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-full
-                               text-gray-700 dark:text-gray-300 text-sm font-medium
-                               hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                    >
-                      Search
-                    </button>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleSingleSearch(source)}
+                        className="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-full
+                                 text-gray-700 dark:text-gray-300 text-sm font-medium
+                                 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                      >
+                        Search
+                      </button>
+                      {source.isCustom && (
+                        <button
+                          onClick={() => handleDeleteSource(source.id)}
+                          className="px-3 py-2 bg-red-100 dark:bg-red-900 rounded-full
+                                   text-red-600 dark:text-red-300 text-sm font-medium
+                                   hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </div>
                   {isSearching && searchQuery && isWindowOpen(searchWindows.current[source.id]) && (
                     <div className="mt-4">
@@ -303,6 +398,83 @@ function App() {
           </div>
         </div>
       </div>
+
+      {/* Add Source Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+              Add Custom Search Engine
+            </h2>
+            <form onSubmit={(e) => { e.preventDefault(); handleAddSource(); }} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Name
+                </label>
+                <input
+                  type="text"
+                  value={newSource.name}
+                  onChange={(e) => setNewSource({ ...newSource, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Search URL (include %s where the search term should go)
+                </label>
+                <input
+                  type="text"
+                  value={newSource.url}
+                  onChange={(e) => setNewSource({ ...newSource, url: e.target.value })}
+                  placeholder="https://example.com/search?q=%s"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Description
+                </label>
+                <input
+                  type="text"
+                  value={newSource.description}
+                  onChange={(e) => setNewSource({ ...newSource, description: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Category
+                </label>
+                <select
+                  value={newSource.category}
+                  onChange={(e) => setNewSource({ ...newSource, category: e.target.value as 'general' | 'academic' })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600"
+                >
+                  <option value="general">General</option>
+                  <option value="academic">Academic</option>
+                </select>
+              </div>
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                >
+                  Add Search Engine
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="flex-none p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-md border-t border-gray-200 dark:border-gray-700">
