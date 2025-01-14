@@ -15,6 +15,7 @@ interface SearchWindow {
 function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [selectedEngines, setSelectedEngines] = useState<{[key: string]: boolean}>({});
   const searchWindows = useRef<SearchWindow>({});
 
   const searchSources: SearchSource[] = [
@@ -101,9 +102,11 @@ function App() {
     
     setIsSearching(true);
 
-    // 依次打开或更新每个搜索窗口
-    for (let i = 0; i < searchSources.length; i++) {
-      const source = searchSources[i];
+    // 只搜索选中的搜索引擎
+    const selectedSources = searchSources.filter(source => selectedEngines[source.id]);
+    
+    for (let i = 0; i < selectedSources.length; i++) {
+      const source = selectedSources[i];
       setTimeout(() => {
         openSearchWindow(source, searchQuery);
       }, i * 100);
@@ -114,6 +117,30 @@ function App() {
     if (!searchQuery.trim()) return;
     openSearchWindow(source, searchQuery);
   };
+
+  const handleEngineToggle = (sourceId: string) => {
+    const newSelectedEngines = {
+      ...selectedEngines,
+      [sourceId]: !selectedEngines[sourceId]
+    };
+    setSelectedEngines(newSelectedEngines);
+    localStorage.setItem('searchEnginePreferences', JSON.stringify(newSelectedEngines));
+  };
+
+  useEffect(() => {
+    const savedPreferences = localStorage.getItem('searchEnginePreferences');
+    if (savedPreferences) {
+      setSelectedEngines(JSON.parse(savedPreferences));
+    } else {
+      // 默认全选
+      const defaultPreferences = searchSources.reduce((acc, source) => {
+        acc[source.id] = true;
+        return acc;
+      }, {} as {[key: string]: boolean});
+      setSelectedEngines(defaultPreferences);
+      localStorage.setItem('searchEnginePreferences', JSON.stringify(defaultPreferences));
+    }
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -154,7 +181,7 @@ function App() {
                        bg-blue-500 text-white px-6 py-2 rounded-full 
                        hover:bg-blue-600 transition-colors"
             >
-              Search All
+              Search Selected
             </button>
           </form>
         </div>
@@ -175,13 +202,22 @@ function App() {
                   className="bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-shadow p-6"
                 >
                   <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                        {source.name}
-                      </h2>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                        {source.description}
-                      </p>
+                    <div className="flex items-center space-x-3">
+                      <input
+                        type="checkbox"
+                        id={`engine-${source.id}`}
+                        checked={selectedEngines[source.id] || false}
+                        onChange={() => handleEngineToggle(source.id)}
+                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                      />
+                      <div>
+                        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                          {source.name}
+                        </h2>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                          {source.description}
+                        </p>
+                      </div>
                     </div>
                     <button
                       onClick={() => handleSingleSearch(source)}
@@ -222,13 +258,22 @@ function App() {
                   className="bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-shadow p-6"
                 >
                   <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                        {source.name}
-                      </h2>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                        {source.description}
-                      </p>
+                    <div className="flex items-center space-x-3">
+                      <input
+                        type="checkbox"
+                        id={`engine-${source.id}`}
+                        checked={selectedEngines[source.id] || false}
+                        onChange={() => handleEngineToggle(source.id)}
+                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                      />
+                      <div>
+                        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                          {source.name}
+                        </h2>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                          {source.description}
+                        </p>
+                      </div>
                     </div>
                     <button
                       onClick={() => handleSingleSearch(source)}
@@ -263,7 +308,7 @@ function App() {
       <div className="flex-none p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-md border-t border-gray-200 dark:border-gray-700">
         <div className="max-w-4xl mx-auto text-center space-y-2">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Click "Search All" to search in all engines, or use individual search buttons.
+            Click "Search Selected" to search in selected engines, or use individual search buttons.
           </p>
           <div className="text-sm text-gray-600 dark:text-gray-400">
             <p>Contact: 微信公众号: 正经人王同学</p>
